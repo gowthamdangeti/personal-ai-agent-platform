@@ -16,14 +16,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export type Agent = { id: string; name: string; slug: string; kind: string; description?: string | null };
+export type Agent = {
+  id: string;
+  name: string;
+  slug: string;
+  kind: string;
+  description?: string | null;
+  config?: { top_k?: number; output?: string; [key: string]: unknown };
+  created_at?: string;
+};
 export type DocumentItem = {
   id: string; filename: string; size_bytes: number; status: string;
   chunk_count: number; error_message?: string | null; created_at: string;
 };
 export type AgentRun = {
   id: string; status: string; question: string; answer?: string | null;
-  sources: { filename: string; chunk_index: number; excerpt: string; distance?: number | null }[];
+  sources: { filename: string; chunk_index?: number; chunk_count?: number; excerpt?: string; distance?: number | null }[];
   duration_ms?: number | null;
   created_at: string;
 };
@@ -67,6 +75,12 @@ export const api = {
   },
   stats: () => request<Stats>("/api/v1/dashboard/stats"),
   agents: () => request<Agent[]>("/api/v1/agents"),
+  createAgent: (data: { name: string; kind?: string; description?: string; config?: Record<string, unknown> }) =>
+    request<Agent>("/api/v1/agents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
   documents: () => request<DocumentItem[]>("/api/v1/documents"),
   runs: () => request<AgentRun[]>("/api/v1/agents/runs?limit=10"),
   upload: async (file: File) => {

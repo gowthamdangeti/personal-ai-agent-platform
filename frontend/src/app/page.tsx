@@ -45,7 +45,7 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  // History filtering
+  // History filtering & details
   const [historySearch, setHistorySearch] = useState("");
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
   const [viewRunDetails, setViewRunDetails] = useState<AgentRun | null>(null);
@@ -55,16 +55,23 @@ export default function HomePage() {
   const [searchTesting, setSearchTesting] = useState(false);
   const [searchTestResults, setSearchTestResults] = useState<AgentRun | null>(null);
 
-  // Approvals state (mock review status for runs)
+  // Approvals state
   const [approvedRunIds, setApprovedRunIds] = useState<Set<string>>(new Set());
   const [rejectedRunIds, setRejectedRunIds] = useState<Set<string>>(new Set());
 
-  // Workflow builder template selector
+  // Workflow builder simulation state
   const [activeWorkflowTemplate, setActiveWorkflowTemplate] = useState("rag");
   const [workflowSimulating, setWorkflowSimulating] = useState(false);
   const [workflowSimResult, setWorkflowSimResult] = useState<string | null>(null);
 
-  // Read URL query parameter for tab on mount
+  // Add Agent Modal state
+  const [showAddAgentModal, setShowAddAgentModal] = useState(false);
+  const [newAgentName, setNewAgentName] = useState("");
+  const [newAgentKind, setNewAgentKind] = useState("knowledge");
+  const [newAgentDescription, setNewAgentDescription] = useState("");
+  const [creatingAgent, setCreatingAgent] = useState(false);
+
+  // Check query parameter on client mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -190,7 +197,31 @@ export default function HomePage() {
           ? "✓ Pipeline verified: Document parser → JSON schema validator → Structured key extraction completed successfully."
           : "✓ Pipeline verified: Trigger listener → Multi-agent router → Tool execution pipeline operational."
       );
-    }, 900);
+    }, 850);
+  }
+
+  async function handleCreateAgent(e: FormEvent) {
+    e.preventDefault();
+    if (!newAgentName.trim()) return;
+    setCreatingAgent(true);
+    setError("");
+    try {
+      await api.createAgent({
+        name: newAgentName.trim(),
+        kind: newAgentKind,
+        description: newAgentDescription.trim() || undefined,
+        config: newAgentKind === "knowledge" ? { top_k: 5 } : { output: "json" },
+      });
+      setNotice(`Agent '${newAgentName.trim()}' created successfully.`);
+      setShowAddAgentModal(false);
+      setNewAgentName("");
+      setNewAgentDescription("");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create agent");
+    } finally {
+      setCreatingAgent(false);
+    }
   }
 
   function approveRun(id: string) {
@@ -214,10 +245,10 @@ export default function HomePage() {
   // Filtered runs for Execution History
   const filteredRuns = useMemo(() => {
     return runs.filter((run) => {
-      const matchesSearch =
-        !historySearch ||
-        run.question.toLowerCase().includes(historySearch.toLowerCase()) ||
-        (run.answer && run.answer.toLowerCase().includes(historySearch.toLowerCase()));
+      const q = (run.question || "").toLowerCase();
+      const a = (run.answer || "").toLowerCase();
+      const term = historySearch.toLowerCase();
+      const matchesSearch = !term || q.includes(term) || a.includes(term);
       const matchesStatus = historyStatusFilter === "all" || run.status === historyStatusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -233,18 +264,21 @@ export default function HomePage() {
         <div className="workspace-label">CORE</div>
         <nav>
           <button
+            type="button"
             className={`sidebar-nav-btn ${activeSection === "overview" ? "active" : ""}`}
             onClick={() => setActiveSection("overview")}
           >
             <i>◫</i> <span>Overview</span>
           </button>
           <button
+            type="button"
             className={`sidebar-nav-btn ${activeSection === "agents" ? "active" : ""}`}
             onClick={() => setActiveSection("agents")}
           >
             <i>🤖</i> <span>My Agents</span>
           </button>
           <button
+            type="button"
             className={`sidebar-nav-btn ${activeSection === "workflows" ? "active" : ""}`}
             onClick={() => setActiveSection("workflows")}
           >
@@ -255,12 +289,14 @@ export default function HomePage() {
         <div className="workspace-label">KNOWLEDGE &amp; DATA</div>
         <nav>
           <button
+            type="button"
             className={`sidebar-nav-btn ${activeSection === "knowledge" ? "active" : ""}`}
             onClick={() => setActiveSection("knowledge")}
           >
             <i>📚</i> <span>Knowledge Bases</span>
           </button>
           <button
+            type="button"
             className={`sidebar-nav-btn ${activeSection === "documents" ? "active" : ""}`}
             onClick={() => setActiveSection("documents")}
           >
@@ -271,18 +307,21 @@ export default function HomePage() {
         <div className="workspace-label">ACTIONS &amp; TOOLS</div>
         <nav>
           <button
+            type="button"
             className={`sidebar-nav-btn ${activeSection === "integrations" ? "active" : ""}`}
             onClick={() => setActiveSection("integrations")}
           >
             <i>🔌</i> <span>Integrations &amp; Tools</span>
           </button>
           <button
+            type="button"
             className={`sidebar-nav-btn ${activeSection === "history" ? "active" : ""}`}
             onClick={() => setActiveSection("history")}
           >
             <i>🕒</i> <span>Execution History</span>
           </button>
           <button
+            type="button"
             className={`sidebar-nav-btn ${activeSection === "approvals" ? "active" : ""}`}
             onClick={() => setActiveSection("approvals")}
           >
@@ -293,12 +332,14 @@ export default function HomePage() {
         <div className="workspace-label">INSIGHTS &amp; CONFIG</div>
         <nav>
           <button
+            type="button"
             className={`sidebar-nav-btn ${activeSection === "analytics" ? "active" : ""}`}
             onClick={() => setActiveSection("analytics")}
           >
             <i>📊</i> <span>Analytics &amp; Reports</span>
           </button>
           <button
+            type="button"
             className={`sidebar-nav-btn ${activeSection === "settings" ? "active" : ""}`}
             onClick={() => setActiveSection("settings")}
           >
@@ -308,13 +349,13 @@ export default function HomePage() {
 
         <div className="sidebar-bottom">
           <div className="local-pill"><i /> Local workspace</div>
-          <small>Personal AI Agent Platform<br />FastAPI · Next.js · pgvector · BYOK</small>
+          <small>Personal AI Platform<br />FastAPI · Next.js · pgvector · BYOK</small>
         </div>
       </aside>
 
-      {/* Main Area */}
+      {/* Main Content Area */}
       <section className="main-area">
-        {/* Topbar */}
+        {/* Top Header */}
         <header className="topbar">
           <div>
             <div className="eyebrow">PERSONAL AI AGENT PLATFORM</div>
@@ -457,14 +498,18 @@ export default function HomePage() {
                       <small>{answer.duration_ms ?? 0} ms · {answer.status}</small>
                     </div>
                     <p>{answer.answer}</p>
-                    {answer.sources.length > 0 && (
+                    {answer.sources && answer.sources.length > 0 && (
                       <>
                         <div className="source-title">RETRIEVED PASSAGES ({answer.sources.length})</div>
                         {answer.sources.map((source, idx) => (
                           <div className="source-item" key={idx}>
                             <strong>{source.filename}</strong>
-                            <small>Chunk {source.chunk_index} · cosine distance {source.distance ?? "n/a"}</small>
-                            <p>{source.excerpt}</p>
+                            <small>
+                              {source.chunk_index !== undefined ? `Chunk ${source.chunk_index}` : ""}
+                              {source.distance !== undefined && source.distance !== null ? ` · distance ${source.distance}` : ""}
+                              {source.chunk_count !== undefined ? ` · ${source.chunk_count} chunks` : ""}
+                            </small>
+                            {source.excerpt && <p>{source.excerpt}</p>}
                           </div>
                         ))}
                       </>
@@ -473,7 +518,7 @@ export default function HomePage() {
                 )}
               </section>
 
-              {/* Quick Document Upload & Knowledge summary */}
+              {/* Quick Document Upload */}
               <section className="panel">
                 <div className="panel-heading">
                   <div>
@@ -497,7 +542,7 @@ export default function HomePage() {
                 <div className="section-divider" />
                 <div className="list-heading">
                   <strong>Recent Knowledge Files</strong>
-                  <button className="text-button" onClick={() => setActiveSection("documents")}>View All Documents →</button>
+                  <button type="button" className="text-button" onClick={() => setActiveSection("documents")}>View All Documents →</button>
                 </div>
                 <div className="document-list">
                   {documents.slice(0, 4).map((doc) => (
@@ -528,7 +573,10 @@ export default function HomePage() {
               <p className="muted" style={{ margin: 0 }}>
                 Manage autonomous agents. Each agent can have specialized prompts, retrieval parameters, or custom BYOK models.
               </p>
-              <button className="secondary-button" onClick={() => void refresh()}>↻ Refresh Agents</button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button type="button" className="secondary-button" onClick={() => void refresh()}>↻ Refresh Agents</button>
+                <button type="button" className="primary-button" onClick={() => setShowAddAgentModal(true)}>+ New Agent</button>
+              </div>
             </div>
 
             <div className="agent-grid">
@@ -553,16 +601,19 @@ export default function HomePage() {
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Model Engine:</span>
-                      <span className="detail-value">{defaultCred ? `${defaultCred.provider} (${defaultCred.model_name})` : "Default (OpenAI / Preview)"}</span>
+                      <span className="detail-value">
+                        {defaultCred ? `${defaultCred.provider} (${defaultCred.model_name})` : "Default (OpenAI / Preview)"}
+                      </span>
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Retrieval Top K:</span>
-                      <span className="detail-value">{(agent as any).config?.top_k || 5} chunks</span>
+                      <span className="detail-value">{agent.config?.top_k || 5} chunks</span>
                     </div>
                   </div>
 
                   <div style={{ marginTop: "auto", display: "flex", gap: "8px", paddingTop: "12px", borderTop: "1px solid var(--line)" }}>
                     <button
+                      type="button"
                       className="primary-button"
                       style={{ padding: "8px 12px", fontSize: "11px", flex: 1 }}
                       onClick={() => {
@@ -583,13 +634,9 @@ export default function HomePage() {
                   Define custom agent roles, specialized system prompts, or specific model overrides.
                 </p>
                 <button
+                  type="button"
                   className="secondary-button"
-                  onClick={() => {
-                    const name = prompt("Enter new agent name:");
-                    if (name) {
-                      api.agents().then(() => setNotice(`Agent template '${name}' noted.`));
-                    }
-                  }}
+                  onClick={() => setShowAddAgentModal(true)}
                 >
                   + Add Agent
                 </button>
@@ -609,12 +656,14 @@ export default function HomePage() {
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button
+                    type="button"
                     className={`secondary-button ${activeWorkflowTemplate === "rag" ? "active" : ""}`}
                     onClick={() => setActiveWorkflowTemplate("rag")}
                   >
                     RAG Knowledge Q&amp;A
                   </button>
                   <button
+                    type="button"
                     className={`secondary-button ${activeWorkflowTemplate === "extraction" ? "active" : ""}`}
                     onClick={() => setActiveWorkflowTemplate("extraction")}
                   >
@@ -691,6 +740,7 @@ export default function HomePage() {
                   Pipeline status: <strong>All stages operational and connected</strong>
                 </span>
                 <button
+                  type="button"
                   className="primary-button"
                   onClick={handleSimulateWorkflow}
                   disabled={workflowSimulating}
@@ -738,7 +788,7 @@ export default function HomePage() {
                   </button>
                 </form>
 
-                {searchTestResults && (
+                {searchTestResults && searchTestResults.sources && (
                   <div style={{ marginTop: "18px" }}>
                     <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "1px", color: "var(--muted)", marginBottom: "8px" }}>
                       RETRIEVED VECTOR MATCHES ({searchTestResults.sources.length})
@@ -746,10 +796,10 @@ export default function HomePage() {
                     {searchTestResults.sources.map((s, i) => (
                       <div key={i} className="answer-card" style={{ marginTop: "8px", padding: "10px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 700 }}>
-                          <span>{s.filename} (Chunk {s.chunk_index})</span>
-                          <span style={{ color: "var(--blue)" }}>Cosine dist: {s.distance ?? "n/a"}</span>
+                          <span>{s.filename} {s.chunk_index !== undefined ? `(Chunk ${s.chunk_index})` : ""}</span>
+                          <span style={{ color: "var(--blue)" }}>distance: {s.distance ?? "n/a"}</span>
                         </div>
-                        <p style={{ fontSize: "11px", margin: "6px 0 0", color: "#475569" }}>{s.excerpt}</p>
+                        {s.excerpt && <p style={{ fontSize: "11px", margin: "6px 0 0", color: "#475569" }}>{s.excerpt}</p>}
                       </div>
                     ))}
                   </div>
@@ -819,7 +869,7 @@ export default function HomePage() {
                   <div className="eyebrow">STORAGE &amp; PARSING</div>
                   <h2>Document Inventory</h2>
                 </div>
-                <button className="secondary-button" onClick={() => void refresh()}>↻ Refresh Files</button>
+                <button type="button" className="secondary-button" onClick={() => void refresh()}>↻ Refresh Files</button>
               </div>
 
               <form className="upload-box" onSubmit={handleUpload} style={{ margin: "16px 0 24px" }}>
@@ -848,7 +898,7 @@ export default function HomePage() {
                     <div><Status value={doc.status} /></div>
                     <div>
                       {doc.status === "failed" ? (
-                        <button className="text-button" onClick={() => void handleRetry(doc.id)}>Retry</button>
+                        <button type="button" className="text-button" onClick={() => void handleRetry(doc.id)}>Retry</button>
                       ) : (
                         <span style={{ color: "var(--muted)", fontSize: "11px" }}>Ready</span>
                       )}
@@ -948,7 +998,7 @@ export default function HomePage() {
                   <div className="eyebrow">AUDIT LOG</div>
                   <h2>Execution History &amp; Tracing</h2>
                 </div>
-                <button className="secondary-button" onClick={() => void refresh()}>↻ Refresh Activity</button>
+                <button type="button" className="secondary-button" onClick={() => void refresh()}>↻ Refresh Activity</button>
               </div>
 
               <div style={{ display: "flex", gap: "10px", margin: "16px 0", flexWrap: "wrap" }}>
@@ -986,7 +1036,7 @@ export default function HomePage() {
                     <span>{run.duration_ms ?? "—"} ms</span>
                     <span>{new Date(run.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                     <div>
-                      <button className="text-button" onClick={() => setViewRunDetails(run)}>Inspect</button>
+                      <button type="button" className="text-button" onClick={() => setViewRunDetails(run)}>Inspect</button>
                     </div>
                   </div>
                 ))}
@@ -1002,7 +1052,7 @@ export default function HomePage() {
                 <div className="modal" style={{ maxWidth: "600px" }} onClick={(e) => e.stopPropagation()}>
                   <div className="modal-header">
                     <h2>Execution Details</h2>
-                    <button className="icon-button" onClick={() => setViewRunDetails(null)}>✕</button>
+                    <button type="button" className="icon-button" onClick={() => setViewRunDetails(null)}>✕</button>
                   </div>
                   <div className="modal-body">
                     <div>
@@ -1022,7 +1072,10 @@ export default function HomePage() {
                         <div className="field-label">Retrieved Chunks ({viewRunDetails.sources.length})</div>
                         {viewRunDetails.sources.map((s, i) => (
                           <div key={i} style={{ borderTop: "1px solid #edf2f7", padding: "6px 0", fontSize: "11px" }}>
-                            <strong>{s.filename}</strong> (chunk {s.chunk_index}): {s.excerpt}
+                            <strong>{s.filename}</strong>
+                            {s.chunk_index !== undefined && <span> (chunk {s.chunk_index})</span>}
+                            {s.chunk_count !== undefined && <span> ({s.chunk_count} chunks)</span>}
+                            {s.excerpt && <span>: {s.excerpt}</span>}
                           </div>
                         ))}
                       </div>
@@ -1030,7 +1083,7 @@ export default function HomePage() {
                   </div>
                   <div className="modal-footer">
                     <span style={{ fontSize: "11px", color: "var(--muted)" }}>Duration: {viewRunDetails.duration_ms ?? 0}ms</span>
-                    <button className="primary-button" onClick={() => setViewRunDetails(null)}>Close</button>
+                    <button type="button" className="primary-button" onClick={() => setViewRunDetails(null)}>Close</button>
                   </div>
                 </div>
               </div>
@@ -1062,7 +1115,7 @@ export default function HomePage() {
                     <div key={run.id} className="approval-item">
                       <div className="approval-info">
                         <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "4px" }}>
-                          <strong style={{ fontSize: "13px" }}>Prompt: &quot;{run.question.slice(0, 75)}&quot;</strong>
+                          <strong style={{ fontSize: "13px" }}>Prompt: &quot;{(run.question || "Execution").slice(0, 75)}&quot;</strong>
                           {isApproved && <span className="badge-active">✓ Approved</span>}
                           {isRejected && <span className="status status-failed">✕ Rejected</span>}
                           {!isApproved && !isRejected && <span className="badge-default">Pending Review</span>}
@@ -1074,6 +1127,7 @@ export default function HomePage() {
 
                       <div className="approval-actions">
                         <button
+                          type="button"
                           className="secondary-button"
                           onClick={() => approveRun(run.id)}
                           style={{ color: "#166534", borderColor: "#bbf7d0", background: isApproved ? "#dcfce7" : "#fff" }}
@@ -1081,6 +1135,7 @@ export default function HomePage() {
                           ✓ Approve
                         </button>
                         <button
+                          type="button"
                           className="danger-button"
                           onClick={() => rejectRun(run.id)}
                           style={{ background: isRejected ? "#fee2e2" : "#fff" }}
@@ -1252,10 +1307,64 @@ export default function HomePage() {
                 <Link href="/settings/api-keys" className="primary-button" style={{ textDecoration: "none" }}>
                   Manage AI Provider API Keys
                 </Link>
-                <button className="secondary-button" onClick={() => void refresh()}>
+                <button type="button" className="secondary-button" onClick={() => void refresh()}>
                   Reload Platform Config
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Agent Modal */}
+        {showAddAgentModal && (
+          <div className="modal-backdrop" onClick={() => !creatingAgent && setShowAddAgentModal(false)}>
+            <div className="modal" style={{ maxWidth: "480px" }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Create New Agent</h2>
+                <button type="button" className="icon-button" onClick={() => setShowAddAgentModal(false)}>✕</button>
+              </div>
+              <form onSubmit={handleCreateAgent} className="modal-body">
+                <div className="input-group">
+                  <label htmlFor="new-agent-name">Agent Name</label>
+                  <input
+                    id="new-agent-name"
+                    type="text"
+                    required
+                    placeholder="e.g. Research Assistant"
+                    value={newAgentName}
+                    onChange={(e) => setNewAgentName(e.target.value)}
+                  />
+                </div>
+                <div className="input-group">
+                  <label htmlFor="new-agent-kind">Agent Kind</label>
+                  <select
+                    id="new-agent-kind"
+                    value={newAgentKind}
+                    onChange={(e) => setNewAgentKind(e.target.value)}
+                  >
+                    <option value="knowledge">knowledge (RAG vector retrieval)</option>
+                    <option value="document_processing">document_processing (JSON extraction)</option>
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label htmlFor="new-agent-desc">Description (Optional)</label>
+                  <input
+                    id="new-agent-desc"
+                    type="text"
+                    placeholder="e.g. Specializes in answering questions from research papers"
+                    value={newAgentDescription}
+                    onChange={(e) => setNewAgentDescription(e.target.value)}
+                  />
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="secondary-button" onClick={() => setShowAddAgentModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="primary-button" disabled={creatingAgent || !newAgentName.trim()}>
+                    {creatingAgent ? "Creating…" : "Create Agent"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
