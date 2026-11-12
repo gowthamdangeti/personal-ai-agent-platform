@@ -24,10 +24,17 @@ class AgentEngine:
         # Hierarchical BYOK resolution: payload overrides -> agent config -> default credential -> fallback
         llm_config = await resolve_llm_config(db, payload=payload, agent_config=agent.config)
 
+        # Inject execution context
+        payload["run_id"] = run.id
+        payload["agent_id"] = agent.id
+
         started = time.perf_counter()
         try:
             result = await runner.execute(db, payload, llm_config=llm_config)
-            run.status = "completed"
+            if result.get("status") == "suspended_hitl":
+                run.status = "suspended_hitl"
+            else:
+                run.status = "completed"
             run.output_text = result.get("answer", "")
             run.sources = result.get("sources", [])
         except Exception as exc:

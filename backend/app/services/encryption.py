@@ -1,6 +1,8 @@
 import base64
 import hashlib
+import json
 import logging
+import re
 from cryptography.fernet import Fernet, InvalidToken
 from app.core.config import settings
 
@@ -52,6 +54,24 @@ class EncryptionService:
             logger.error("Failed to decrypt API key token with the active key.")
             raise ValueError("Could not decrypt credential. Encryption key may have changed.") from exc
 
+    def encrypt_payload(self, payload: dict) -> str:
+        """Serializes and encrypts an arbitrary dictionary of sensitive credentials."""
+        if not payload:
+            return ""
+        serialized = json.dumps(payload)
+        return self.encrypt(serialized)
+
+    def decrypt_payload(self, ciphertext: str | None) -> dict:
+        """Decrypts and parses an encrypted JSON payload dictionary."""
+        if not ciphertext:
+            return {}
+        try:
+            decrypted_str = self.decrypt(ciphertext)
+            return json.loads(decrypted_str)
+        except Exception as exc:
+            logger.error("Failed to decrypt sensitive payload: %s", exc)
+            return {}
+
     @staticmethod
     def mask_key(key: str) -> str:
         if not key:
@@ -66,6 +86,8 @@ class EncryptionService:
             prefix = "sk-ant-"
         elif clean.startswith("sk-"):
             prefix = "sk-"
+        elif clean.startswith("ghp_") or clean.startswith("github_pat_"):
+            prefix = "ghp_"
         elif clean.startswith("gsk_"):
             prefix = "gsk_"
         elif len(clean) >= 12:
@@ -74,6 +96,19 @@ class EncryptionService:
             prefix = clean[:3]
         return f"{prefix}****{suffix}"
 
+    @classmethod
+    def mask_secret(cls, secret: str, secret_type: str = "generic") -> str:
+        """Masks arbitrary secrets based on type without leaking content."""
+        if not secret:
+            return ""
+        clean = secret.strip()
+        if secret_type == "connection_string":
+            try:
+                # Replace password portion in scheme://user:password@host:port/db
+                return re.sub(r"(://[^:]+:)([^@]+)@", r"\1****@", clean)
+            except Exception:
+                return "connection://****"
+        return cls.mask_key(clean)
+
 
 encryption_service = EncryptionService()
-

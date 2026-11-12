@@ -300,6 +300,148 @@ docker compose build backend worker && docker compose up -d backend worker
 docker compose exec backend sh
 ```
 
+## 12. The 10 Specialized AI Agents: API & cURL Reference
+
+The platform features 10 specialized autonomous agents built on a unified ReAct engine with Human-in-the-Loop (HITL) safety gates:
+
+### 1. Knowledge Agent (`knowledge`)
+Hybrid dense vector (`pgvector`) + sparse text retrieval with Reciprocal Rank Fusion (RRF) and verified citation checking.
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/knowledge/run \
+  -H "Content-Type: application/json" \
+  -d '{"input_text": "What are the database isolation guarantees described in our documentation?"}'
+```
+
+### 2. Document Processing Agent (`document_processing`)
+Extracts schema-enforced JSON structures from uploaded documents with field-level confidence ratings.
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/document_processing/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_text": "Extract all contract parties, effective date, and liability caps.",
+    "parameters": {"schema_name": "vendor_agreement_v1"}
+  }'
+```
+
+### 3. Research Agent (`research`)
+Deconstructs complex investigative topics into DAG sub-questions, queries web indexes (SearXNG/Tavily), and synthesizes multi-section reports.
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/research/run \
+  -H "Content-Type: application/json" \
+  -d '{"input_text": "Evaluate modern distributed consensus protocols for microservices", "parameters": {"depth": 3}}'
+```
+
+### 4. Meeting Intelligence Agent (`meeting_intelligence`)
+Parses diarized meeting transcripts, generates executive summaries, extracts key decisions, and syncs action items.
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/meeting_intelligence/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_text": "Alice: We will finalize the HNSW vector migration by Thursday. Bob will update the integration tests."
+  }'
+```
+
+### 5. QA Agent (`qa`)
+Parses OpenAPI specifications or git diffs, generates syntactically valid PyTest/Playwright test suites, and runs sandboxed syntax dry-runs.
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/qa/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_text": "Generate end-to-end integration tests for GET /api/v1/agents and POST /api/v1/agents/{slug}/run",
+    "parameters": {"framework": "pytest", "target_service": "agent-api"}
+  }'
+```
+
+### 6. Procurement Agent (`procurement`)
+Ingests vendor RFP responses, generates 0-100 compliance scorecards, and creates draft Purchase Orders gated by strict HITL review.
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/procurement/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_text": "Compare cloud compute quotes and generate a purchase order for Acme Cloud Corp"
+  }'
+```
+
+### 7. Finance Agent (`finance`)
+Executes 3-way reconciliation (Invoice vs. PO), runs Z-score anomaly detection across ledgers, and gates disbursement payments.
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/finance/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_text": "Reconcile invoice INV-2024-91 against outstanding POs",
+    "parameters": {"invoice_number": "INV-2024-91", "amount": 12500.00}
+  }'
+```
+
+### 8. IT Operations Agent (`it_ops`)
+Performs log anomaly clustering, queries Prometheus metrics, generates ranked root-cause hypotheses, and gates destructive restart actions.
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/it_ops/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_text": "[CRITICAL] ConnectionPoolTimeout: 50 active connections reached on postgres:5432"
+  }'
+```
+
+### 9. Workflow Automation Agent (`workflow_automation`)
+Compiles and triggers multi-agent Directed Acyclic Graphs (DAGs) in topological order, supporting inter-agent context passing and pause-on-HITL.
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/workflow_automation/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_text": "Execute contract intake pipeline",
+    "parameters": {
+      "dag_schema": {
+        "nodes": [
+          {"id": "doc_step", "agent_kind": "document_processing", "params": {"input_text": "Extract terms"}},
+          {"id": "finance_step", "agent_kind": "finance", "params": {"input_text": "Verify milestones"}}
+        ],
+        "edges": [{"source": "doc_step", "target": "finance_step"}]
+      }
+    }
+  }'
+```
+
+### 10. Data Analyst Agent (`data_analyst`)
+Natural language to SQL with sqlglot AST parsing (enforcing strictly SELECT-only queries, 5000ms timeouts, and force-injected LIMIT 100), returning Plotly chart specs.
+```bash
+curl -X POST http://localhost:8000/api/v1/agents/data_analyst/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_text": "SELECT name, kind, created_at FROM agents ORDER BY created_at DESC",
+    "parameters": {"chart_type": "bar"}
+  }'
+```
+
+### Human-in-the-Loop (HITL) Gate API
+
+When an agent requests a critical action (e.g., `create_purchase_order`, `record_payment`, `restart_service_pod`), the run is suspended and returns a `suspended_hitl` status with a `hitl_request_id`.
+
+#### List Pending Approval Requests:
+```bash
+curl -X GET http://localhost:8000/api/v1/hitl/pending
+```
+
+#### Approve Suspended Action:
+```bash
+curl -X POST http://localhost:8000/api/v1/hitl/<REQUEST_UUID>/approve \
+  -H "Content-Type: application/json" \
+  -d '{"reviewer_notes": "Approved by engineering lead"}'
+```
+
+#### Reject Action:
+```bash
+curl -X POST http://localhost:8000/api/v1/hitl/<REQUEST_UUID>/reject \
+  -H "Content-Type: application/json" \
+  -d '{"reviewer_notes": "Rejected: price exceeds quarterly threshold"}'
+```
+
+### Server-Sent Events (SSE) Streaming
+Stream step-by-step reasoning tokens, tool invocations, and observations in real time:
+```bash
+curl -N http://localhost:8000/api/v1/agents/knowledge/runs/<RUN_UUID>/stream
+```
+
 ## License / ownership
 
 This starter is generated for your personal project. Review dependency licenses and your provider terms before commercial deployment.

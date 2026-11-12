@@ -173,5 +173,66 @@ class LLMService:
         except json.JSONDecodeError:
             return {"raw_model_output": text, "warning": "Model output was not valid JSON."}
 
+    async def chat_completion(
+        self,
+        messages: list[dict],
+        llm_config: ResolvedLLMConfig | None = None,
+        response_format: dict | None = None,
+    ) -> str:
+        if llm_config is None or not llm_config.api_key:
+            last_message = messages[-1]["content"] if messages else ""
+            if "Observation:" in last_message:
+                return json.dumps({
+                    "thought": "I have collected the necessary observation to synthesize the final answer.",
+                    "final_answer": f"Analysis complete based on observation: {last_message[:300]}",
+                    "sources": []
+                })
+            system_msg = next((m["content"] for m in messages if m.get("role") == "system"), "")
+            import re
+            tools = re.findall(r"-\s*([a-zA-Z0-9_]+):", system_msg)
+            if tools:
+                return json.dumps({
+                    "thought": f"Calling tool {tools[0]} to inspect the environment.",
+                    "action": {"tool": tools[0], "input": {}}
+                })
+            return json.dumps({
+                "thought": "Synthesizing response with preview provider.",
+                "final_answer": "Preview mode: configure your API key in Settings → API Keys to enable live reasoning.",
+                "sources": []
+            })
+
+        if llm_config.provider == "anthropic":
+            system_prompt = next((m["content"] for m in messages if m.get("role") == "system"), "")
+            user_messages = [m for m in messages if m.get("role") != "system"]
+            user_content = "\n\n".join(f"{m.get('role', 'user')}: {m.get('content', '')}" for m in user_messages)
+            return await self._call_anthropic_chat(
+                system_prompt=system_prompt,
+                user_prompt=user_content,
+                llm_config=llm_config,
+            )
+
+        client_kwargs = {"api_key": llm_config.api_key}
+        if llm_config.base_url:
+            client_kwargs["base_url"] = llm_config.base_url
+        client = AsyncOpenAI(**client_kwargs)
+
+        kwargs = {
+            "model": llm_config.model,
+            "temperature": 0.2,
+            "messages": messages,
+        }
+        if response_format:
+            kwargs["response_format"] = response_format
+
+        try:
+            response = await client.chat.completions.create(**kwargs)
+            return response.choices[0].message.content or ""
+        except Exception:
+            if response_format:
+                kwargs.pop("response_format", None)
+                response = await client.chat.completions.create(**kwargs)
+                return response.choices[0].message.content or ""
+            raise
+
 
 llm_service = LLMService()

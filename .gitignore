@@ -10,5 +10,10 @@
 **/venv/
 **/node_modules/
 **/.next/
+# Logs & environment
 .DS_Store
 *.log
+
+# Agent skills & local agent workspace configurations
+.agent/
+unslop/
